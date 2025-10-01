@@ -4,6 +4,9 @@ using UnityEngine;
 using TMPro;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
+using Thirdweb.Unity;
+using System.Threading.Tasks;
+using Thirdweb;
 
 public class GameManager : MonoBehaviour
 {
@@ -25,6 +28,17 @@ public class GameManager : MonoBehaviour
     [SerializeField] private List<GameObject> ProgressBars;
     [SerializeField] private Transform ProgressContainer;
     [SerializeField] private ParticleSystem ConfettiPrefab;
+
+    // Partie Thirdweb
+    [SerializeField] private string contractAddress; // Ton adresse de contrat
+    [SerializeField] private int tokenId = 0; // ID du NFT universel
+    [SerializeField] private Sprite featureToUnlock; // Skin/Booster à activer
+    [SerializeField] private TextMeshProUGUI walletAddressText;
+    [SerializeField] private GameObject HeartUI;
+    [SerializeField] private Sprite defaultIcon; // Skin/Booster à activer
+
+    private int chainId = 11155111;
+    private string wallet_address;
 
 
     [SerializeField] private Camera mainCamera; // Ta caméra
@@ -173,5 +187,60 @@ public class GameManager : MonoBehaviour
         ConfettiPrefab.transform.localScale = Vector3.one;
 
         Instantiate(ConfettiPrefab, newPosition,spawnRotation);
+    }
+
+    private async Task CheckOwnership()
+    {
+        try
+        {
+            // 1. Récupère le contrat
+            var contract = await ThirdwebManager.Instance.GetContract(contractAddress, chainId);
+            var result = await contract.Read<string>("name");
+
+
+            // 2. Appelle ownerOf
+            var owner = await contract.Read<string>("ownerOf", tokenId);
+            Debug.Log($"Propriétaire du token {tokenId} : {owner}");
+
+            if (wallet_address != null)
+            {
+                if (owner == wallet_address)
+                {
+                    Debug.Log($"{wallet_address} possède le token {tokenId} ");
+                    walletAddressText.text = "FEATURE : ON";
+                    HeartUI.GetComponent<Image>().sprite = featureToUnlock;
+                }
+                else
+                {
+                    Debug.Log($"{wallet_address} ne possède pas le token {tokenId} ");
+                    walletAddressText.text = "FEATURE : OFF";
+                    HeartUI.GetComponent<Image>().sprite = defaultIcon;
+                }
+            }
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogError($"Erreur : {e.Message}");
+            //featureToUnlock.SetActive(false);
+        }
+    }
+
+    public async void ConnectWallet()
+    {
+        try
+        {
+            var options = new WalletOptions(provider: WalletProvider.WalletConnectWallet, chainId: 1);
+            var wallet = await ThirdwebManager.Instance.ConnectWallet(options);
+            wallet_address = await wallet.GetAddress();
+
+            ThirdwebManager.Instance.SetActiveWallet(wallet);
+
+            await CheckOwnership();
+
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogError($"Erreur : {e.Message}");
+        }
     }
 }
